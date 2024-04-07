@@ -18,10 +18,27 @@ function love.load()
   player.down_sprite = love.graphics.newImage("sprites/yellowbird-downflap.png")
   player.width = player.mid_sprite:getWidth()/2
   player.height = player.mid_sprite:getHeight()/2
-  
+  player.points = 0
   player.sprite_on = player.down_sprite -- Define a sprite inicial do jogador
   player.animation_label = "initial" -- Define a animação do jogador
   player.posy_animation_start = player.x -- Define a posição inicial do jogador durante uma animação
+  
+  numbers = {
+    [0] = love.graphics.newImage("sprites_normais/0.png"),
+    [1] = love.graphics.newImage("sprites_normais/1.png"),
+    [2] = love.graphics.newImage("sprites_normais/2.png"),
+    [3] = love.graphics.newImage("sprites_normais/3.png"),
+    [4] = love.graphics.newImage("sprites_normais/4.png"),
+    [5] = love.graphics.newImage("sprites_normais/5.png"),
+    [6] = love.graphics.newImage("sprites_normais/6.png"),
+    [7] = love.graphics.newImage("sprites_normais/7.png"),
+    [8] = love.graphics.newImage("sprites_normais/8.png"),
+    [9] = love.graphics.newImage("sprites_normais/9.png"),
+  }
+  numbers.width = 24
+  
+  numbers.space_between = 4
+  numbers.posy = 20
 
   -- Carregando as informações iniciais das bases
   base_sprite = love.graphics.newImage("sprites/base.png")
@@ -97,6 +114,7 @@ function love.draw()
   drawPipes()
   drawPlayer()
   drawBase()
+  drawnPoints()
 end
 
 function love.update()
@@ -277,13 +295,43 @@ function drawPipes()
   end
 end
 
+function drawnPoints()
+  local points = player.points
+  local digits = {}
+  if points > 0 then
+    while points > 0 do
+      local digit = points % 10
+      
+      table.insert(digits, 1, digit)
+      
+      points = math.floor(points / 10)
+    end
+  
+  else
+    table.insert(digits, 1, 0)
+  end
+  
+  if #digits > 0 then
+    local initial_position = (window_width - ((#digits - 1) * numbers.space_between + #digits * numbers.width))/ 2
+    for _, value in ipairs(digits) do
+      love.graphics.draw(numbers[value], initial_position, numbers.posy)
+      if value == 1 then
+        initial_position = initial_position + numbers.width + numbers.space_between - 8
+      else
+        initial_position = initial_position + numbers.width + numbers.space_between
+      end
+    end
+  else
+    local initial_position = (window_width - numbers.width) / 2
+    love.graphics.draw(numbers[0], initial_position, numbers.posy)
+  end
+end
+
 function generatePipe()
   new_upper_pipe = math.random(pipes.upper_limit, pipes.low_limit)
   pipe = {}
   pipe.y1 = new_upper_pipe
   pipe.y2 = new_upper_pipe + pipes.space_between
-  print(pipes.low_limit, pipes.space_between)
-  print(pipe.y1, pipe.y2)
   if #pipes.coords == 0 then
     pipe.x = 1.5 * window_width
   else
