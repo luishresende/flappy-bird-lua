@@ -3,8 +3,8 @@ window_height = 640
 math.randomseed(os.time())
 
 function love.load()
-
   love.window.setMode(window_width, window_height, {resizable=false})
+  love.window.setTitle("Flappy Bird")
 
   background_day_sprite = love.graphics.newImage("sprites/background-day.png")
   
@@ -21,24 +21,27 @@ function love.load()
   player.points = 0
   player.sprite_on = player.down_sprite -- Define a sprite inicial do jogador
   player.animation_label = "initial" -- Define a animação do jogador
-  player.posy_animation_start = player.x -- Define a posição inicial do jogador durante uma animação
+  player.posy_animation_start = player.posx -- Define a posição inicial do jogador durante uma animação
+  player.alive = true -- Define se o jogador está vivo
+  player.on_ground = false -- Define se o jogador já está no chão
+  player.die_reason = nil -- Controla se o som de queda deve tocar ou não (ele só toca quando o jogador bate no cano)
   
+  -- Carregando as sprites dos números
   numbers = {
-    [0] = love.graphics.newImage("sprites_normais/0.png"),
-    [1] = love.graphics.newImage("sprites_normais/1.png"),
-    [2] = love.graphics.newImage("sprites_normais/2.png"),
-    [3] = love.graphics.newImage("sprites_normais/3.png"),
-    [4] = love.graphics.newImage("sprites_normais/4.png"),
-    [5] = love.graphics.newImage("sprites_normais/5.png"),
-    [6] = love.graphics.newImage("sprites_normais/6.png"),
-    [7] = love.graphics.newImage("sprites_normais/7.png"),
-    [8] = love.graphics.newImage("sprites_normais/8.png"),
-    [9] = love.graphics.newImage("sprites_normais/9.png"),
+    [0] = love.graphics.newImage("sprites/0.png"),
+    [1] = love.graphics.newImage("sprites/1.png"),
+    [2] = love.graphics.newImage("sprites/2.png"),
+    [3] = love.graphics.newImage("sprites/3.png"),
+    [4] = love.graphics.newImage("sprites/4.png"),
+    [5] = love.graphics.newImage("sprites/5.png"),
+    [6] = love.graphics.newImage("sprites/6.png"),
+    [7] = love.graphics.newImage("sprites/7.png"),
+    [8] = love.graphics.newImage("sprites/8.png"),
+    [9] = love.graphics.newImage("sprites/9.png"),
   }
   numbers.width = 24
-  
-  numbers.space_between = 4
-  numbers.posy = 20
+  numbers.space_between = 4 -- Espaço que será colocado entre os números
+  numbers.posy = 20 -- Altura que os numeros serão desenhados
 
   -- Carregando as informações iniciais das bases
   base_sprite = love.graphics.newImage("sprites/base.png")
@@ -59,16 +62,16 @@ function love.load()
   pipes.sprite = love.graphics.newImage("sprites/pipe-green.png")
   pipes.width = pipes.sprite:getWidth()
   pipes.height = pipes.sprite:getHeight()
-  pipes.space_between = player.height * 7
-  pipes.upper_limit = 100
-  print(base1.y)
-  pipes.low_limit = base1.y - pipes.upper_limit - pipes.space_between
+  pipes.space_between = player.height * 7 -- Definição do espaço entre os canos superior e inferior
+  pipes.upper_limit = 100 -- Limite superior (x) de geração do cano
+  pipes.low_limit = base1.y - pipes.upper_limit - pipes.space_between -- Limite inferior é calculado utilizando a coordenada do chão, o limite superior e o espaço entre os canos
   pipes.coords = {}
-  for i = 1, 10 do
+  -- Gerando 4 pipes para o inicio do jogo
+  for i = 1, 4 do
     generatePipe()
   end
   
-  
+  -- Carregando informações iniciais sobre as animações do jogo
   animations = {}
   animations["initial"] = {}
   animations["initial"].speed = 0.2 -- Define a velocidade da animação inicial (passáro indo para cima e bara baixo)
@@ -77,19 +80,19 @@ function love.load()
   animations["initial"].state = nil -- Define o atual estado da animação, (nil, up ou down)
   
   animations["fly"] = {}
-  animations["fly"].strength = 7
+  animations["fly"].strength = 7 -- Define a quantidade de pixels que o passáro sobe por execução
   animations["fly"].strength_default = 7
-  animations["fly"].strength_down = 0.7
-  animations["fly"].limit_up = -30
-  animations["fly"].state = nil
-  animations["fly"].count = 0
+  animations["fly"].strength_down = 0.7 -- Define a perda de força durante cada execução
+  animations["fly"].limit_up = -30 -- Define a altura máxima que o passáro chega em um pulo
+  animations["fly"].state = nil -- Estado inicial da animação
+  animations["fly"].count = 0 -- Contador para a animação
   
   animations["fall"] = {}
-  animations["fall"].strength = 0.1
-  animations["fall"].strength_default = 0.1
-  animations["fall"].strength_up = 0.05
-  animations["fall"].count = 0
-  animations["fall"].str_start_factor = 10
+  animations["fall"].strength = 0.1 -- Define a força de queda
+  animations["fall"].strength_default = 0.1 
+  animations["fall"].strength_up = 0.05 -- Define o ganho da força de queda a cada execução
+  animations["fall"].count = 0 -- Contador para a animação
+  animations["fall"].str_start_factor = 10 -- Define quando o passáro começa a rotacionar em direção ao chao. Quanto maior, mais demora
   
   animations["wing"] = {}
   animations["wing"].speed = 1 -- Precisa ser menor que count_limit, ou será executado todo frame
@@ -103,13 +106,18 @@ function love.load()
   animations["pipes"] = {}
   animations["pipes"].speed = animations["base"].speed
   
-  
+  -- Carregando os audios do jogo
   audios = {}
   audios.wing = love.audio.newSource("audio/wing.wav", "static")
+  audios.hit = love.audio.newSource("audio/hit.wav", "static")
+  audios.point = love.audio.newSource("audio/point.wav", "static")
+  audios.die = love.audio.newSource("audio/die.wav", "static")
+  die_song_played = false
 end
 
 
 function love.draw()
+  -- Chamando as funções de desenho
   love.graphics.draw(background_day_sprite, 0, 0)
   drawPipes()
   drawPlayer()
@@ -118,10 +126,53 @@ function love.draw()
 end
 
 function love.update()
-  if love.keyboard.isDown("space") then
-    playerStopFall()
-    player.animation_label = "fly"
-    audios.wing:play()
+  --[[ Único controle do jogo é a tecla espaço
+    Se o jogador estiver vivo, ela faz o jogador pular
+    Se estiver morto e no chão, reinicia o jogo
+  ]]
+  if player.alive then
+    if love.keyboard.isDown("space") then
+      playerStopFall()
+      player.animation_label = "fly"
+      audios.wing:play()
+    end
+    -- Se o jogador estiver vivo, é verificado se existe colisão com o chão ou com os canos
+    playerBaseCollision()
+    playerPipeCollision()
+  elseif player.on_ground then
+    if love.keyboard.isDown("space") then
+      restartGame()
+    end
+  end
+end
+
+function restartGame()
+  -- Redefinindo valores iniciais do jogo
+  playerStopFall()
+  player.die_reason = nil
+  player.animation_label = "initial"
+  player.posx = 160
+  player.posy = 250
+  player.rotation = 0
+  player.points = 0
+  player.posy_animation_start = player.posx
+  player.alive = true
+  player.on_ground = false
+  pipes.coords = {}
+  for i = 1, 4 do
+    generatePipe()
+  end
+end
+
+function playerBaseCollision()
+  --[[
+    Essa função verifica se a largura do jogador mais a sua posição no eixo y
+    (o que resulta na posição exata da parte de baixo durante a queda) é maior que a posição do chão no eixo y. Se for, há colisão
+  ]]
+  if (player.posy + player.width > window_height - base_height  and player.rotation > 1.3059) or (player.posy + player.height > window_height - base_height) then
+    audios.hit:play()
+    player.alive = false
+    player.die_reason = "base-collision"
   end
 end
 
@@ -220,30 +271,45 @@ function playerFallAnimation()
     player.rotation = 1.571
   end
   
-  -- Reduzindo a altura do jogador
-  player.posy = player.posy + animations[player.animation_label].strength
+  if not player.alive and player.rotation >= 0.262 and player.animation_label and not die_song_played and player.die_reason == "pipe-collision" then
+    audios.die:play()
+    die_song_played = true
+  end
   
-  -- Aumentando a força da queda a cada iteraço
-  animations[player.animation_label].count = animations[player.animation_label].count + animations[player.animation_label].strength
-  animations[player.animation_label].strength = animations[player.animation_label].strength + animations[player.animation_label].strength_up
-  
-  
-  
+  if player.posy + player.width <= window_height - base_height then
+    -- Reduzindo a altura do jogador
+    player.posy = player.posy + animations[player.animation_label].strength
+      -- Aumentando a força da queda a cada iteraço
+    animations[player.animation_label].count = animations[player.animation_label].count + animations[player.animation_label].strength
+    animations[player.animation_label].strength = animations[player.animation_label].strength + animations[player.animation_label].strength_up
+  else
+    player.on_ground = true
+  end
+    
 end
 
 function initialPlayerAnimation()
+  --[[
+    Essa função controla a animação inicial do jogador, onde voa suavemente para cima e para baixo
+  ]]
+  
+  -- Se o estado da animação for nulo, então ele começa indo para cima
   if animations[player.animation_label].state == nil then
     player.posy_animation_start = player.posy
     animations[player.animation_label].state = "up"
   end
   
+  -- Se o estado da animação for "up",  verificado se ele já chegou no limite de altura
   if animations[player.animation_label].state == "up" then
     if player.posy < player.posy_animation_start + animations[player.animation_label].limit_up then
-      animations[player.animation_label].state = "down"
+      -- Se chegou no limite de altura, na próxima ele vai para baixo
+      animations[player.animation_label].state = "down" 
     else
+      -- Se não chegou, continua indo para cima
       player.posy = player.posy - animations[player.animation_label].speed
     end
   else 
+    -- Mesma lógica do limite superior, porém aplicada para o limite inferior
     if player.posy > player.posy_animation_start + animations[player.animation_label].limit_down then
       animations[player.animation_label].state = "up"
     else
@@ -253,8 +319,12 @@ function initialPlayerAnimation()
 end
 
 function drawPlayer()
-  playerWingAnimation()
+  -- Faz a animação da asa enquanto o jogador estiver vivo
+  if player.alive then
+    playerWingAnimation()
+  end
   
+  -- Verifica a animação atual do jogador e aplica as modificações nele
   if player.animation_label == "initial" then
     initialPlayerAnimation()
   elseif player.animation_label == "fly" then
@@ -263,15 +333,18 @@ function drawPlayer()
     playerFallAnimation()
   end
   
+  -- Desenhando o jogador
   love.graphics.draw(player.sprite_on, player.posx, player.posy, player.rotation, 1, 1, player.width, player.height)
 end
 
 function drawBase()
   -- A animação do chão é feita com dois "chãos", um ao lado do outro, que se movimentam junto.
 
-  -- Aplicando a animação no chão reduzindo as coordenadas no eixo x
-  base1.x = base1.x - animations["base"].speed
-  base2.x = base2.x - animations["base"].speed
+  if player.alive then
+    -- Aplicando a animação no chão reduzindo as coordenadas no eixo x
+    base1.x = base1.x - animations["base"].speed
+    base2.x = base2.x - animations["base"].speed
+  end
   
   --[[
   Se a posição x do chão 2 for menor que 0, indica que ele está passando da tela.
@@ -288,14 +361,27 @@ function drawBase()
 end
 
 function drawPipes()
-  for i = 1, #pipes.coords do
-    love.graphics.draw(pipes.sprite, pipes.coords[i].x, pipes.coords[i].y1 - pipes.height, 3.14159, 1, 1, pipes.width, pipes.height)
-    love.graphics.draw(pipes.sprite, pipes.coords[i].x, pipes.coords[i].y2)
-    pipes.coords[i].x = pipes.coords[i].x - animations["pipes"].speed
+  -- Se aanimação do jogador não for a inicial, os canos se aproximam do jogador
+  if player.animation_label ~= "initial" then
+    for i = 1, #pipes.coords do
+      -- Aplicando rotação de 90 graus para o cano de cima (já que na sprite a ponta do cano está para cima
+      love.graphics.draw(pipes.sprite, pipes.coords[i].x, pipes.coords[i].y1 - pipes.height, 3.14159, 1, 1, pipes.width, pipes.height)
+      love.graphics.draw(pipes.sprite, pipes.coords[i].x, pipes.coords[i].y2)
+      if player.alive then 
+        -- Se o jogador estiver vivo, atualizo as coordenadas do cano
+        pipes.coords[i].x = pipes.coords[i].x - animations["pipes"].speed
+      end
+    end
   end
 end
 
 function drawnPoints()
+  --[[
+    Essa função obtém o número de ponto do jogador, e com base no resto da divisão
+    por 10 vai separando os digitos e colocando-os em uma table, de maneira que seja
+    possível desenha-los depois
+    Tudo isso apenas para obter cada digito separadamente, porque o número pode ter mais de um
+  ]]
   local points = player.points
   local digits = {}
   if points > 0 then
@@ -311,32 +397,90 @@ function drawnPoints()
     table.insert(digits, 1, 0)
   end
   
-  if #digits > 0 then
-    local initial_position = (window_width - ((#digits - 1) * numbers.space_between + #digits * numbers.width))/ 2
-    for _, value in ipairs(digits) do
+  --[[ 
+    Calculo da posição inicial do primeiro digito com base na 
+    quantidade de digitos existentes e seus espaçamentos
+  ]]
+  local initial_position = (window_width - ((#digits - 1) * numbers.space_between + #digits * numbers.width))/ 2
+  for _, value in ipairs(digits) do
       love.graphics.draw(numbers[value], initial_position, numbers.posy)
-      if value == 1 then
-        initial_position = initial_position + numbers.width + numbers.space_between - 8
-      else
-        initial_position = initial_position + numbers.width + numbers.space_between
+    if value == 1 then -- O digito 1  a única sprite menor que as outras, gambiarra para corrigir o espaçamento
+      initial_position = initial_position + numbers.width + numbers.space_between - 8
+    else
+      initial_position = initial_position + numbers.width + numbers.space_between
+    end
+  end
+end
+
+function playerPipeCollision()
+  --[[
+    Funço responsável por:
+      - Apagar canos que já passaram da tela
+      - Gerar novos canos
+      - Aumentar pontuação do jogador quando ele passa completamente de um cano
+      - Verificar colisão do jogador com os canos
+  ]]
+  
+  -- Para cada cano existente, se ele já não foi passado pelo jogador, verifico a colisão
+  for i = 1, #pipes.coords do
+    if not pipes.coords[i].defeated then
+      --[[
+        Verifico:
+          - Colisão do lado esquerdo do cano em relação ao jogador
+          - Se o jogador ainda está antes do lado direito do cano (se ele já passou ou não)
+          - Se o jogador não está no espaço entre os canos
+        Se tudo for válidado, indica colisão
+      ]]
+      if pipes.coords[i].x <= player.posx + player.height and pipes.coords[i].x + pipes.width * 1.5 >= player.posx + player.width and not (pipes.coords[i].y1 + 14 < player.posy and pipes.coords[i].y2 > player.posy + player.height) then
+        audios.hit:play()
+        player.alive = false
+        player.die_reason = "pipe-collision"
+      elseif pipes.coords[i].x + pipes.width < player.posx then
+        --[[
+          Se o jogador não bateu no cano que está seno avaliado, e já passou dele,
+          ele recebe um ponto e o audio de pontuação é tocado.
+          O cano também  atualizado para "passado", para ser 
+          excluido posteriormente e no cair mais nas verificações de colisão
+        ]]
+        player.points = player.points + 1
+        pipes.coords[i].defeated = true
+        audios.point:play()
       end
     end
-  else
-    local initial_position = (window_width - numbers.width) / 2
-    love.graphics.draw(numbers[0], initial_position, numbers.posy)
+  end
+  
+  --[[
+    Se o primeiro cano da lista já tiver sido passado, e a coordenada x dele
+    estiver fora da tela, ele é removido e é gerado outro cano no final da table
+  ]]
+  if pipes.coords[1].defeated and pipes.coords[1].x + pipes.width < 0 then
+    table.remove(pipes.coords, 1)
+    generatePipe()
   end
 end
 
 function generatePipe()
+  --[[
+    Função responsável por gerar novos canos aleatóriamente
+  ]]
+  
+  -- Calculo da coordenada y do cano superior aleatório
   new_upper_pipe = math.random(pipes.upper_limit, pipes.low_limit)
   pipe = {}
   pipe.y1 = new_upper_pipe
-  pipe.y2 = new_upper_pipe + pipes.space_between
+  -- Definição da posição do cano inferior com base no cano superior e o espaço entre os canos
+  pipe.y2 = new_upper_pipe + pipes.space_between 
+  pipe.defeated = false
+  
+  -- Se for o primeiro cano a ser gerado, ele é criado fora da tela, com meia tela de espaço para fora
   if #pipes.coords == 0 then
     pipe.x = 1.5 * window_width
   else
-    pipe.x = pipes.coords[#pipes.coords].x + window_height / 2
+    -- Se não for o primeiro cano, a cordenada x do novo cano é calculada com base na coordenada x 
+    -- do ultimo cano, mais metade do espaço da largura da janela
+    pipe.x = pipes.coords[#pipes.coords].x + window_width / 2
   end
   
+  -- Insiro o cano na table
   table.insert(pipes.coords, pipe)
 end
